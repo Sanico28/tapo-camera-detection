@@ -14,11 +14,15 @@ VEHICLE_WEIGHTS_TONS = {
     'truck': 15.0,
 }
 
-# Entry and exit lines (Y coordinates)
-ENTRY_LINE_Y = 184
-EXIT_LINE_Y = 209
+# Entry and exit LINES AS VERTICAL (Y-axis) LINES -> constant X positions
+# Tune these X values to where you want the vertical lines on screen
+ENTRY_LINE_X = 350   # entry vertical line (pixels, X axis)
+EXIT_LINE_X = 650    # exit  vertical line (pixels, X axis)
 LINE_TOLERANCE = 8
 STALE_FRAMES_TO_EVICT = 120  # frames after last seen to evict lost IDs
+
+# Process every Nth frame (used for speed calculation timing)
+FRAME_STRIDE = 3
 
 # ------------------------------
 # Optional: Mouse position debug
@@ -35,6 +39,9 @@ def RGB(event, x, y, flags, param):
 model = YOLO('yolov8s.pt')
 cap = cv2.VideoCapture('tf.mp4')
 
+# FPS from video (fallback to 30 if not available)
+FPS = cap.get(cv2.CAP_PROP_FPS) or 30.0
+
 with open("coco.txt", "r") as my_file:
     class_list = my_file.read().split("\n")
 
@@ -48,11 +55,15 @@ truck_tracker = Tracker()
 
 # Runtime state
 on_bridge_ids = set()  # set of tuples like ('car', id)
-id_to_last_cy = {}     # map of ('car', id) -> last center y
+id_to_last_cx = {}     # map of ('car', id) -> last center x (for crossings)
+id_to_last_cy = {}     # map of ('car', id) -> last center y (for vertical speed)
 current_load_tons = 0.0
 
 # Track last seen frame for each key to evict stale IDs
 id_to_last_seen_frame = {}
+
+# Per-object vertical speed (pixels/second) along Y axis
+id_to_speed_y = {}
 
 # Diagnostics (optional)
 entries = {'car': 0, 'bus': 0, 'truck': 0}
@@ -66,8 +77,8 @@ while True:
         break
 
     frame_idx += 1
-    # Process every 3rd frame to reduce load
-    if frame_idx % 3 != 0:
+    # Process every Nth frame to reduce load
+    if frame_idx % FRAME_STRIDE != 0:
         continue
 
     frame = cv2.resize(frame, (1020, 500))
@@ -102,11 +113,12 @@ while True:
     # Determine barrier state
     barrier_closed = current_load_tons >= CAPACITY_TONS
 
-    # Draw entry/exit lines (color reflects barrier state)
+    # Draw entry/exit lines as VERTICAL lines (color reflects barrier state)
     entry_color = (0, 0, 255) if barrier_closed else (0, 255, 0)
     exit_color = (0, 0, 255)
-    cv2.line(frame, (1, ENTRY_LINE_Y), (1018, ENTRY_LINE_Y), entry_color, 2)
-    cv2.line(frame, (3, EXIT_LINE_Y), (1016, EXIT_LINE_Y), exit_color, 2)
+    h, w = frame.shape[:2]
+    cv2.line(frame, (ENTRY_LINE_X, 0), (ENTRY_LINE_X, h - 1), entry_color, 2)
+    cv2.line(frame, (EXIT_LINE_X, 0), (EXIT_LINE_X, h - 1), exit_color, 2)
 
     # Helper to process a single detection list
     def process_boxes(boxes, cls_name):
@@ -117,12 +129,21 @@ while True:
             cy = int((y1 + y2) / 2)
 
             key = (cls_name, obj_id)
+            prev_cx = id_to_last_cx.get(key)
             prev_cy = id_to_last_cy.get(key)
 
-            # Detect crossings using previous and current center Y positions
-            if prev_cy is not None:
-                crossed_entry = (prev_cy < ENTRY_LINE_Y - LINE_TOLERANCE) and (cy >= ENTRY_LINE_Y + LINE_TOLERANCE)
-                crossed_exit = (prev_cy < EXIT_LINE_Y - LINE_TOLERANCE) and (cy >= EXIT_LINE_Y + LINE_TOLERANCE)
+            # Detect crossings using previous and current center X positions (vertical lines)
+            if prev_cx is not None:
+                crossed_entry = (prev_cx < ENTRY_LINE_X - LINE_TOLERANCE) and (cx >= ENTRY_LINE_X + LINE_TOLERANCE)
+                crossed_exit = (prev_cx < EXIT_LINE_X - LINE_TOLERANCE) and (cx >= EXIT_LINE_X + LINE_TOLERANCE)
+
+                # Calculate Y-AXIS speed (vertical movement only, NOT horizontal/X-axis)
+                # dy = change in Y position (positive = moving down, negative = moving up)
+                dy = cy - prev_cy if prev_cy is not None else 0  # ONLY using Y coordinate, NOT X
+                dt = FRAME_STRIDE / FPS if FPS > 0 else 0
+                if dt > 0:
+                    v_y = dy / dt  # Vertical speed in pixels per second
+                    id_to_speed_y[key] = v_y
 
                 # Handle entry
                 if crossed_entry and key not in on_bridge_ids:
@@ -142,13 +163,23 @@ while True:
                     on_bridge_ids.discard(key)
                     exits[cls_name] += 1
 
-            # Update last seen Y and last seen frame
+            # Update last seen X/Y and last seen frame
+            id_to_last_cx[key] = cx
             id_to_last_cy[key] = cy
             id_to_last_seen_frame[key] = frame_idx
 
             # Draw bbox and ID label
             cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 255), 2)
-            cvzone.putTextRect(frame, f'{cls_name} #{obj_id}', (x1, max(0, y1 - 10)), 1, 1)
+
+            # Display Y-axis speed (vertical movement only)
+            v_y = id_to_speed_y.get(key)
+            if v_y is not None:
+                # vy = vertical speed along Y-axis (positive = down, negative = up)
+                label = f'{cls_name} #{obj_id} vy={v_y:.1f}px/s'
+            else:
+                label = f'{cls_name} #{obj_id}'
+
+            cvzone.putTextRect(frame, label, (x1, max(0, y1 - 10)), 1, 1)
             cv2.circle(frame, (cx, cy), 3, (0, 255, 255), -1)
 
     # Process detections by class
@@ -185,10 +216,17 @@ while True:
         colorT=(255, 255, 255)
     )
 
-    # Visual barrier at the entry line when closed
+    # Visual barrier at the entry line when closed (vertical red bar)
     if barrier_closed:
-        cv2.rectangle(frame, (0, max(0, ENTRY_LINE_Y - 6)), (frame.shape[1], ENTRY_LINE_Y + 6), (0, 0, 255), -1)
-        cvzone.putTextRect(frame, 'NO ENTRY - OVER CAPACITY', (10, ENTRY_LINE_Y - 35), 1, 1, colorR=(0, 0, 255))
+        h, w = frame.shape[:2]
+        cv2.rectangle(
+            frame,
+            (max(0, ENTRY_LINE_X - 6), 0),
+            (min(w - 1, ENTRY_LINE_X + 6), h),
+            (0, 0, 255),
+            -1
+        )
+        cvzone.putTextRect(frame, 'NO ENTRY - OVER CAPACITY', (10, 30 + 35), 1, 1, colorR=(0, 0, 255))
 
     # Show frame
     cv2.imshow("RGB", frame)
