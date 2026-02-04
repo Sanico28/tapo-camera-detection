@@ -23,8 +23,58 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 
-# Large ffmpeg executables
-ffmpeg-*/bin/*.exe
-ffmpeg-*/**/*.exe
-*.exe
+# Large ffmpeg executables and directories
+ffmpeg*/
+**/ffmpeg*
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+venv/
+env/
+
+# PyTorch/AI Models
+*.pt
+*.pth
+*.onnx
+
+# Video files
+*.mp4
+*.avi
+*.mkv
+*.mov
+*.MOV
+*.wmv
+
+# HLS Streaming files
+*.m3u8
+*.ts
+public/stream/
+
+# Speed violations (can be large)
+**/speed_violations/
+speed_violations/
+
+# Large data directories
+data/
+datasets/
+models/
+checkpoints/
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs and cache
+logs/
+*.cache
+.pytest_cache/
+
+# IDE and OS
+.ipynb_checkpoints/
+*.tmp
+*.temp
 

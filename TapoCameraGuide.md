@@ -32,25 +32,34 @@ This converts the RTSP stream to HLS files that the browser can play.
 1. Ensure the output folder exists:
 
 ```powershell
-mkdir C:\xampp\tapo\public\stream
+mkdir D:\tapo\tapo\public\stream
 ```
 
 2. Start FFmpeg from PowerShell (keep this window **open** while you view the camera):
 
+**Method 1: Using the call operator (&) - RECOMMENDED**
 ```powershell
-"C:\xampp\tapo\ffmpeg-2026-01-22-git-4561fc5e48-full_build\ffmpeg-2026-01-22-git-4561fc5e48-full_build\bin\ffmpeg.exe" -rtsp_transport tcp -i "rtsp://admin123:admin123@192.168.1.52:554/stream1" -fflags +genpts -flags -global_header -hls_time 2 -hls_list_size 3 -hls_flags delete_segments -vcodec copy -acodec aac -f hls "C:\xampp\tapo\public\stream\index.m3u8"
+& "D:\tapo\tapo\ffmpeg-2026-01-22-git-4561fc5e48-full_build\ffmpeg-2026-01-22-git-4561fc5e48-full_build\bin\ffmpeg.exe" -rtsp_transport tcp -i "rtsp://admin123:admin123@192.168.1.52:554/stream1" -fflags +genpts -flags -global_header -hls_time 2 -hls_list_size 3 -hls_flags delete_segments -vcodec copy -acodec aac -f hls "D:\tapo\tapo\public\stream\index.m3u8"
 ```
-or 
-& "C:\xampp\tapo\ffmpeg-2026-01-22-git-4561fc5e48-full_build\ffmpeg-2026-01-22-git-4561fc5e48-full_build\bin\ffmpeg.exe" -rtsp_transport tcp -i "rtsp://admin123:admin123@192.168.1.52:554/stream1" -fflags +genpts -flags -global_header -hls_time 2 -hls_list_size 3 -hls_flags delete_segments -vcodec copy -acodec aac -f hls "C:\xampp\tapo\public\stream\index.m3u8"
 
-You should see the PowerShell window stay busy (not return to `C:\>`).  
-In `C:\xampp\tapo\public\stream` you should see `index.m3u8` and small `.ts` files.
+**Method 2: For your specific IP (192.168.1.152)**
+```powershell
+& "D:\tapo\tapo\ffmpeg-2026-01-22-git-4561fc5e48-full_build\ffmpeg-2026-01-22-git-4561fc5e48-full_build\bin\ffmpeg.exe" -rtsp_transport tcp -i "rtsp://admin123:admin123@192.168.1.152:554/stream1" -fflags +genpts -flags -global_header -hls_time 2 -hls_list_size 3 -hls_flags delete_segments -vcodec copy -acodec aac -f hls "D:\tapo\tapo\public\stream\index.m3u8"
+```
+
+**Method 3: Using Command Prompt (cmd) if PowerShell gives trouble**
+```cmd
+"D:\tapo\tapo\ffmpeg-2026-01-22-git-4561fc5e48-full_build\ffmpeg-2026-01-22-git-4561fc5e48-full_build\bin\ffmpeg.exe" -rtsp_transport tcp -i "rtsp://admin123:admin123@192.168.1.152:554/stream1" -fflags +genpts -flags -global_header -hls_time 2 -hls_list_size 3 -hls_flags delete_segments -vcodec copy -acodec aac -f hls "D:\tapo\tapo\public\stream\index.m3u8"
+```
+
+You should see the PowerShell window stay busy (not return to `D:\>`).  
+In `D:\tapo\tapo\public\stream` you should see `index.m3u8` and small `.ts` files.
 
 ---
 
 ### 3. Start Laravel and open the camera page
 
-1. From another terminal in `C:\xampp\tapo`:
+1. From another terminal in `D:\tapo\tapo`:
 
 ```powershell
 php artisan serve
@@ -84,14 +93,14 @@ The **yolov8-multiple-vehicle-detection** script reads the same HLS stream, dete
 1. **Install Python dependencies** (once) in a terminal:
 
 ```powershell
-cd C:\xampp\tapo\yolov8-multiple-vehicle-detection
+cd D:\tapo\tapo\yolov8-multiple-vehicle-detection
 pip install ultralytics opencv-python pandas cvzone
 ```
 
 2. **Start YOLOv8** (keep this window open):
 
 ```powershell
-cd C:\xampp\tapo\yolov8-multiple-vehicle-detection
+cd D:\tapo\tapo\yolov8-multiple-vehicle-detection
 python mainh.py
 ```
 

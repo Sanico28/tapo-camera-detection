@@ -50,6 +50,13 @@ HLS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 HLS_PLAYLIST = str(HLS_OUTPUT_DIR / "detection.m3u8")
 HLS_SEGMENT = str(HLS_OUTPUT_DIR / "detection%03d.ts")
 
+# Video source options (in order of preference)
+VIDEO_SOURCES = [
+    'http://127.0.0.1:8000/stream/index.m3u8',  # Laravel HLS stream
+    'rtsp://admin123:admin123@192.168.1.152:554/stream1',  # Tapo RTSP
+    0,  # Default webcam
+]
+
 # ------------------------------
 # Optional: Mouse position debug
 # ------------------------------
@@ -72,14 +79,33 @@ if device == 'cuda':
 
 model = YOLO('yolov8s.pt')
 model.to(device)  # Move model to GPU
-# Read video from Tapo HLS stream served by Laravel
-# Make sure:
-# 1) FFmpeg is running and writing to tapo/public/stream/index.m3u8
-# 2) php artisan serve is running on http://127.0.0.1:8000
-cap = cv2.VideoCapture('http://127.0.0.1:8000/stream/index.m3u8')
+
+# Try video sources in order until one works
+cap = None
+video_source = None
+for source in VIDEO_SOURCES:
+    print(f"Trying video source: {source}")
+    cap = cv2.VideoCapture(source)
+    if cap.isOpened():
+        # Test if we can read a frame
+        ret, test_frame = cap.read()
+        if ret:
+            video_source = source
+            print(f"✓ Successfully connected to: {source}")
+            break
+        else:
+            cap.release()
+    if cap is not None:
+        cap.release()
+        cap = None
+
+if cap is None or video_source is None:
+    print("❌ Failed to connect to any video source!")
+    exit(1)
 
 # FPS from video (fallback to 30 if not available)
 FPS = cap.get(cv2.CAP_PROP_FPS) or 30.0
+print(f"Video FPS: {FPS}")
 
 # Output FPS for the YOLO (detection) stream.
 # We only process every FRAME_STRIDE frame, so the effective output FPS is lower.
@@ -118,14 +144,19 @@ ffmpeg_command = [
     HLS_PLAYLIST
 ]
 
-# Start FFmpeg process
-ffmpeg_process = subprocess.Popen(
-    ffmpeg_command,
-    stdin=subprocess.PIPE,
-    stdout=subprocess.DEVNULL,
-    stderr=subprocess.DEVNULL
-)
-print(f"✓ FFmpeg HLS output started: {HLS_PLAYLIST}")
+# Start FFmpeg process with error handling
+ffmpeg_process = None
+try:
+    ffmpeg_process = subprocess.Popen(
+        ffmpeg_command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE
+    )
+    print(f"✓ FFmpeg HLS output started: {HLS_PLAYLIST}")
+except Exception as e:
+    print(f"❌ Failed to start FFmpeg: {e}")
+    print("Continuing without HLS output...")
 
 # Use separate trackers per class for stable IDs
 car_tracker = Tracker()
@@ -168,12 +199,25 @@ exits = {'car': 0, 'bus': 0, 'truck': 0}
 
 # Process frames
 frame_idx = 0
+consecutive_failures = 0
+max_failures = 30  # Stop after 30 consecutive failed frame reads
+
+print(f"Starting processing from source: {video_source}")
+print("Press ESC or 'q' to quit...")
+
 while True:
     ret, frame = cap.read()
     if not ret:
-        break
+        consecutive_failures += 1
+        print(f"Failed to read frame (attempt {consecutive_failures})")
+        if consecutive_failures >= max_failures:
+            print("Too many consecutive failures, stopping...")
+            break
+        continue
 
+    consecutive_failures = 0  # Reset on successful read
     frame_idx += 1
+
     # Process every Nth frame to reduce load
     if frame_idx % FRAME_STRIDE != 0:
         continue
@@ -471,6 +515,11 @@ while True:
     # Overlay current load and barrier status
     status_text = 'CLOSED' if barrier_closed else 'OPEN'
     status_color = (0, 0, 255) if barrier_closed else (0, 200, 0)
+
+    # Add video source info to status
+    source_info = f"Source: {video_source}" if isinstance(
+        video_source, str) else f"Source: Webcam {video_source}"
+
     cvzone.putTextRect(
         frame,
         f'Bridge: {status_text} | Load: {current_load_tons:.1f}/{CAPACITY_TONS:.1f} tons',
@@ -478,6 +527,16 @@ while True:
         1,
         2,
         colorR=status_color,
+        colorT=(255, 255, 255)
+    )
+
+    cvzone.putTextRect(
+        frame,
+        source_info,
+        (10, 70),
+        1,
+        1,
+        colorR=(100, 100, 100),
         colorT=(255, 255, 255)
     )
 
@@ -503,17 +562,21 @@ while True:
         cvzone.putTextRect(frame, 'NO ENTRY - OVER CAPACITY',
                            (10, 30 + 35), 1, 1, colorR=(0, 0, 255))
 
-    # Show frame locally (optional - comment out if you don't want local window)
+    # Show frame locally
     cv2.imshow("RGB", frame)
 
-    # Write processed frame to FFmpeg pipe for HLS streaming
-    try:
-        ffmpeg_process.stdin.write(frame.tobytes())
-        ffmpeg_process.stdin.flush()
-    except (BrokenPipeError, OSError):
-        print("FFmpeg pipe closed, continuing without HLS output...")
+    # Write processed frame to FFmpeg pipe for HLS streaming (if available)
+    if ffmpeg_process is not None:
+        try:
+            ffmpeg_process.stdin.write(frame.tobytes())
+            ffmpeg_process.stdin.flush()
+        except (BrokenPipeError, OSError):
+            print("FFmpeg pipe closed, continuing without HLS output...")
+            ffmpeg_process = None
 
-    if cv2.waitKey(1) & 0xFF == 27:
+    # Check for exit key
+    key = cv2.waitKey(1) & 0xFF
+    if key == 27 or key == ord('q'):  # ESC or 'q'
         break
 
 # Final stats

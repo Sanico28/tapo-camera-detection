@@ -61,4 +61,4 @@ The Laravel framework is open-sourced software licensed under the [MIT license](
 =======
 # tapo-camera-detection
 connected na ang camera
->>>>>>> 8ac0abb6e4fde3fe39836ab6821e61d5f829060a
+>>>>>>> [speed_violations](yolov8-multiple-vehicle-detection/speed_violations)8ac0abb6e4fde3fe39836ab6821e61d5f829060a
