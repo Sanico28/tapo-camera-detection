@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\CameraController;
+use App\Http\Controllers\HonkDetectionController;
+use App\Http\Controllers\SpeedViolationsController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -18,6 +20,16 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
     Route::get('/camera', [CameraController::class, 'index'])->name('camera.index');
+
+    Route::get('/honk-detection', [HonkDetectionController::class, 'index'])
+        ->name('honk.index');
+
+    Route::get('/speed-violations', [SpeedViolationsController::class, 'index'])
+        ->name('speed.index');
 });
+
+// Image URLs must work without auth so <img> tags load (e.g. on honk-detection / speed-violations)
+Route::get('/speed-violations/image/{filename}', [SpeedViolationsController::class, 'image'])
+    ->name('speed.image')->where('filename', '[a-zA-Z0-9_\-\.]+');
 
 require __DIR__.'/auth.php';

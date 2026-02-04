@@ -10,7 +10,7 @@ Follow these steps each time you want to use it:
 
 - **Same network**: Your Windows PC and the Tapo C310 camera must be on the same LAN/Wi‑Fi.
 - **Camera IP**: In the Tapo app, open your C310 → tap the **settings (⚙)** → **Device Info** and confirm the IP.
-  - Your current IP is **`10.169.1.38`** (also stored in `.env` as `TAPO_IP`).
+  - Your current IP is **`192.168.1.52`** (also stored in `.env` as `TAPO_IP`).
 - **Camera Account**:
   - In the Tapo app: C310 → **⚙ Settings** → **Advanced Settings** → **Camera Account**.
   - Create a username and password (you are using `admin123` / `admin123`).
@@ -18,7 +18,7 @@ Follow these steps each time you want to use it:
 Test RTSP with VLC on your PC:
 
 ```text
-rtsp://admin123:admin123@10.169.1.38:554/stream1
+rtsp://admin123:admin123@192.168.1.52:554/stream1
 ```
 
 If VLC shows video, the camera and RTSP are working.
@@ -38,8 +38,10 @@ mkdir C:\xampp\tapo\public\stream
 2. Start FFmpeg from PowerShell (keep this window **open** while you view the camera):
 
 ```powershell
-"C:\xampp\tapo\ffmpeg-2026-01-22-git-4561fc5e48-full_build\ffmpeg-2026-01-22-git-4561fc5e48-full_build\bin\ffmpeg.exe" -rtsp_transport tcp -i "rtsp://admin123:admin123@10.169.1.38:554/stream1" -fflags +genpts -flags -global_header -hls_time 2 -hls_list_size 3 -hls_flags delete_segments -vcodec copy -acodec aac -f hls "C:\xampp\tapo\public\stream\index.m3u8"
+"C:\xampp\tapo\ffmpeg-2026-01-22-git-4561fc5e48-full_build\ffmpeg-2026-01-22-git-4561fc5e48-full_build\bin\ffmpeg.exe" -rtsp_transport tcp -i "rtsp://admin123:admin123@192.168.1.52:554/stream1" -fflags +genpts -flags -global_header -hls_time 2 -hls_list_size 3 -hls_flags delete_segments -vcodec copy -acodec aac -f hls "C:\xampp\tapo\public\stream\index.m3u8"
 ```
+or 
+& "C:\xampp\tapo\ffmpeg-2026-01-22-git-4561fc5e48-full_build\ffmpeg-2026-01-22-git-4561fc5e48-full_build\bin\ffmpeg.exe" -rtsp_transport tcp -i "rtsp://admin123:admin123@192.168.1.52:554/stream1" -fflags +genpts -flags -global_header -hls_time 2 -hls_list_size 3 -hls_flags delete_segments -vcodec copy -acodec aac -f hls "C:\xampp\tapo\public\stream\index.m3u8"
 
 You should see the PowerShell window stay busy (not return to `C:\>`).  
 In `C:\xampp\tapo\public\stream` you should see `index.m3u8` and small `.ts` files.
@@ -69,14 +71,41 @@ http://127.0.0.1:8000/camera
 
 You should see:
 
-- Camera information with IP `10.169.1.38`.
+- Camera information with IP `192.168.1.52`.
 - The RTSP URL text.
 - A **Live View (browser)** player showing the Tapo C310 video (if FFmpeg is running).
 
 ---
 
-### 4. Stopping everything
+### 4. Run YOLOv8 vehicle detection (optional)
+
+The **yolov8-multiple-vehicle-detection** script reads the same HLS stream, detects vehicles, and saves speed violation images. Run it **after** FFmpeg and Laravel are running.
+
+1. **Install Python dependencies** (once) in a terminal:
+
+```powershell
+cd C:\xampp\tapo\yolov8-multiple-vehicle-detection
+pip install ultralytics opencv-python pandas cvzone
+```
+
+2. **Start YOLOv8** (keep this window open):
+
+```powershell
+cd C:\xampp\tapo\yolov8-multiple-vehicle-detection
+python mainh.py
+```
+
+- The script reads from `http://127.0.0.1:8000/stream/index.m3u8`, so **FFmpeg** and **php artisan serve** must already be running.
+- A window opens showing the live stream with vehicle boxes and speed; speed violations are saved under `yolov8-multiple-vehicle-detection\speed_violations\`.
+- View those images in the Laravel app at **Speed Violations** (left sidebar → **Speed Violations**).
+
+3. **Stop YOLOv8**: press **Ctrl + C** in the YOLOv8 window, or close the window.
+
+---
+
+### 5. Stopping everything
 
 - To stop streaming: press **Ctrl + C** in the PowerShell window running FFmpeg.
+- To stop YOLOv8: press **Ctrl + C** in the `python mainh.py` window (if running).
 - To stop Laravel: press **Ctrl + C** in the `php artisan serve` window.
 

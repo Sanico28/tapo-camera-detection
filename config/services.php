@@ -36,7 +36,9 @@ return [
     ],
 
     'tapo' => [
-        'ip' => env('TAPO_IP', '10.169.1.38'),
+        'ip' => env('TAPO_IP', '192.168.1.52'),
     ],
+
+    'speed_violations_path' => env('SPEED_VIOLATIONS_PATH', null),
 
 ];
